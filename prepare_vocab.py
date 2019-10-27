@@ -26,7 +26,7 @@ def main():
     args = parse_args()
     
     # input files
-    train_file = args.data_dir + '/train.json'
+    train_file = args.data_dir + '/train_merge.json'
     dev_file = args.data_dir + '/dev.json'
     test_file = args.data_dir + '/test.json'
     wv_file = args.glove_dir + '/' + args.wv_file

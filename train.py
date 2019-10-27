@@ -13,6 +13,11 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+# eigener Code
+from torch.utils.tensorboard import SummaryWriter
+from utils import torch_utils, scorer, constant, helper
+writer = SummaryWriter()
+
 from data.loader import DataLoader
 from model.rnn import RelationModel
 from utils import scorer, constant, helper
@@ -31,6 +36,12 @@ parser.add_argument('--word_dropout', type=float, default=0.04, help='The rate a
 parser.add_argument('--topn', type=int, default=1e10, help='Only finetune top N embeddings.')
 parser.add_argument('--lower', dest='lower', action='store_true', help='Lowercase all words.')
 parser.add_argument('--no-lower', dest='lower', action='store_false')
+
+# eigener Code
+parser.add_argument('--fine_tune', type=bool, default=False, help="Fine-tune loaded model")
+parser.add_argument('--model', type=str, default='best_model.pt', help='Name of the model file.')
+parser.add_argument('--model_dir', type=str, default='./saved_models/00', help='Name of the model file.')
+
 parser.set_defaults(lower=False)
 
 parser.add_argument('--attn', dest='attn', action='store_true', help='Use attention layer.')
@@ -97,7 +108,23 @@ file_logger = helper.FileLogger(model_save_dir + '/' + opt['log'], header="# epo
 helper.print_config(opt)
 
 # model
-model = RelationModel(opt, emb_matrix=emb_matrix)
+if not opt['fine_tune']:
+    print("Instantiating new model")
+    model = RelationModel(opt, emb_matrix=emb_matrix)
+    print("model:\n", model.model)
+else:
+    # load opt
+    print("Loading pre-trained model")
+    model_file = opt['model_dir'] + '/' + opt['model']
+    print("Loading model from {}".format(model_file))
+    opt = torch_utils.load_config(model_file)
+    model = RelationModel(opt)
+    print("model:\n", model.model)
+    model.load(model_file)
+    for param in model.parameters:
+        param.requires_grad = False
+    model.model._modules['linear']= nn.Linear(opt['hidden_dim'], opt['num_class'])
+    print("adapted model:\n", model.model)
 
 id2label = dict([(v,k) for k,v in constant.LABEL_TO_ID.items()])
 dev_f1_history = []
@@ -131,12 +158,17 @@ for epoch in range(1, opt['num_epoch']+1):
         dev_loss += loss
     predictions = [id2label[p] for p in predictions]
     dev_p, dev_r, dev_f1 = scorer.score(dev_batch.gold(), predictions)
-    
+
     train_loss = train_loss / train_batch.num_examples * opt['batch_size'] # avg loss per batch
     dev_loss = dev_loss / dev_batch.num_examples * opt['batch_size']
     print("epoch {}: train_loss = {:.6f}, dev_loss = {:.6f}, dev_f1 = {:.4f}".format(epoch,\
             train_loss, dev_loss, dev_f1))
     file_logger.log("{}\t{:.6f}\t{:.6f}\t{:.4f}".format(epoch, train_loss, dev_loss, dev_f1))
+
+    # eigener Code
+    writer.add_scalar("F1/dev", dev_f1, epoch)
+    writer.add_scalar("Loss/dev", dev_loss, epoch)
+    writer.add_scalar("Loss/train", train_loss, epoch)
 
     # save
     model_file = model_save_dir + '/checkpoint_epoch_{}.pt'.format(epoch)
@@ -146,7 +178,7 @@ for epoch in range(1, opt['num_epoch']+1):
         print("new best model saved.")
     if epoch % opt['save_epoch'] != 0:
         os.remove(model_file)
-    
+
     # lr schedule
     if len(dev_f1_history) > 10 and dev_f1 <= dev_f1_history[-1] and \
             opt['optim'] in ['sgd', 'adagrad']:

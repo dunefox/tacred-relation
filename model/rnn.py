@@ -22,7 +22,11 @@ class RelationModel(object):
             self.model.cuda()
             self.criterion.cuda()
         self.optimizer = torch_utils.get_optimizer(opt['optim'], self.parameters, opt['lr'])
-    
+
+    def print_model(self):
+        print("model architecture")
+        print(self.model)
+
     def update(self, batch):
         """ Run a step of forward and backward model update. """
         if self.opt['cuda']:

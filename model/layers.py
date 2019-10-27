@@ -26,13 +26,13 @@ class LSTMLayer(nn.Module):
         _, idx_unsort = torch.sort(idx_sort, dim=0)
 
         lens = list(x_lens[idx_sort])
-        
+
         # sort by seq lens
         x = x.index_select(0, idx_sort)
         rnn_input = nn.utils.rnn.pack_padded_sequence(x, lens, batch_first=True)
         rnn_output, (ht, ct) = self.rnn(rnn_input, init_state)
         rnn_output = nn.utils.rnn.pad_packed_sequence(rnn_output, batch_first=True)[0]
-        
+
         # unsort
         rnn_output = rnn_output.index_select(0, idx_unsort)
         ht = ht.index_select(0, idx_unsort)
@@ -45,7 +45,7 @@ class PositionAwareAttention(nn.Module):
     a = T' . tanh(Ux + Vq + Wf)
     where x is the input, q is the query, and f is additional position features.
     """
-    
+
     def __init__(self, input_size, query_size, feature_size, attn_size):
         super(PositionAwareAttention, self).__init__()
         self.input_size = input_size
@@ -67,7 +67,7 @@ class PositionAwareAttention(nn.Module):
         if self.wlinear is not None:
             self.wlinear.weight.data.normal_(std=0.001)
         self.tlinear.weight.data.zero_() # use zero to give uniform attention at the beginning
-    
+
     def forward(self, x, x_mask, q, f):
         """
         x : batch_size * seq_len * input_size
